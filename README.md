@@ -136,24 +136,7 @@ OPENCLAW_TOKEN=xxx DELIVER_TO_FEISHU=false python3 rss_scrawler.py
 - 如果抓取不到条目或解析报错：检查 RSS 源是否可访问（网络/代理问题），或尝试增加 `requests` 的 `timeout` 值。
 - 权限错误：确保 `HISTORY_FILE` 指向的目录可写。
 
-## 发布到 GitHub 的建议（快速清单）
-
-1. 在仓库根添加合适的 `LICENSE`（例如 MIT / Apache-2.0）。
-2. 添加 `.gitignore`（建议忽略 `.venv/`, `__pycache__/`, `.rss_history.json`, `.env` 等）。
-3. 提交代码并推到远程仓库：
-
-```bash
-cd rss_scrawler
-git init
-git add rss_scrawler.py README.md
-git commit -m "feat: add rss_scrawler and README"
-# 使用 GitHub CLI 创建仓库（可选）
-gh repo create <owner>/rss_scrawler --public --source=. --remote=origin
-git push -u origin main
-```
-
-（替代方案：在 GitHub Web 界面新建仓库，然后按提示添加远端并推送。）
-
+## 贡献
 ## 贡献
 
 欢迎 issue、PR 与建议。常见贡献流程：fork → 新建分支 → 提交 PR。请在 PR 描述中说明变更目的与测试方式。
