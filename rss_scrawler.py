@@ -24,7 +24,6 @@ import json
 import os
 import re
 import sys
-import socket
 import logging
 from datetime import datetime
 from html.parser import HTMLParser
@@ -210,7 +209,6 @@ FEISHU_TARGET = os.environ.get("FEISHU_TARGET") or _yaml_config.get("deliver", {
 # 从环境变量或 YAML 获取历史文件路径，然后展开环境变量与 ~
 _raw_history_file = os.environ.get("HISTORY_FILE") or _yaml_config.get("history", {}).get("file") or HISTORY_FILE
 HISTORY_FILE = os.path.expanduser(os.path.expandvars(_raw_history_file))
-HISTORY_MAX_SIZE = _as_int(_pick_env_yaml("HISTORY_MAX_SIZE", ("history", "max_size"), HISTORY_MAX_SIZE), HISTORY_MAX_SIZE)
 
 REQUEST_TIMEOUT = _as_int(_pick_env_yaml("REQUEST_TIMEOUT", ("network", "timeout"), 20), 20)
 
