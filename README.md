@@ -12,18 +12,18 @@
 ## 前置依赖
 
 - Python 3.8+
-- Python 包：`feedparser`、`requests`
+- Python 包：`feedparser`、`requests`、`PyYAML`（可选，用于 `config.yaml`）和 `python-dotenv`（可选，用于 `.env`）
 - 外部工具：`openclaw` CLI（脚本通过子进程调用该命令来执行 Agent）
 
-安装示例：
+安装示例（推荐使用仓库中的 `requirements.txt`）：
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install feedparser requests
+pip install -r requirements.txt
 ```
 
-（如果你有统一的 `requirements.txt`，也可以使用 `pip install -r requirements.txt`。）
+(也可以单独安装需要的包：`pip install feedparser requests PyYAML python-dotenv`。)
 
 ## 配置说明
 
@@ -37,7 +37,7 @@ pip install feedparser requests
   - `FEISHU_CHANNEL` / `FEISHU_TARGET`：推送目标通道与对象，默认在脚本中有示例值。
   - `SOCKS5_PROXY`：如果需要走 SOCKS5 代理，可在脚本中或环境变量中设置（脚本会尝试使用该值进行请求）。
 
-- 历史记录文件（用于去重）默认为：`/home/yunzhi/.openclaw/.rss_history.json`。如需更改，请编辑脚本顶部的 `HISTORY_FILE` 常量或创建对应目录并保证可写权限。
+- 历史记录文件（用于去重）默认为：`$HOME/.openclaw/.rss_history.json`。如需更改，请编辑脚本顶部的 `HISTORY_FILE` 常量或创建对应目录并保证可写权限。
 
 ## 配置示例
 
@@ -137,14 +137,5 @@ OPENCLAW_TOKEN=xxx DELIVER_TO_FEISHU=false python3 rss_scrawler.py
 - 权限错误：确保 `HISTORY_FILE` 指向的目录可写。
 
 ## 贡献
-## 贡献
 
 欢迎 issue、PR 与建议。常见贡献流程：fork → 新建分支 → 提交 PR。请在 PR 描述中说明变更目的与测试方式。
-
-## 许可证
-
-请在发布前在仓库根添加 `LICENSE` 文件，明确开源许可。若需要我帮你添加常用许可模板（MIT / Apache-2.0），我可以代为创建。
-
----
-
-如需我把该 README 添加到仓库（已完成）并帮你初始化 Git 仓库与推送到 GitHub，请告诉我你的 GitHub 仓库名或是否要我用 `gh` CLI 为你创建。 
