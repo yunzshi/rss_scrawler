@@ -7,13 +7,13 @@ FACTS_CRAWLER: 纯净事实提取器 (Anti-FOMO)
 
 前置依赖:
     pip install feedparser requests
-
+    
 用法:
     # 直接运行（自动从 openclaw.json 读取配置）
-    python facts_crawler.py
+    python rss_scrawler.py
 
     # 通过环境变量覆盖配置
-    OPENCLAW_TOKEN=xxx DELIVERY_WEBHOOK=https://... python facts_crawler.py
+    OPENCLAW_TOKEN=xxx python rss_scrawler.py
 """
 
 import feedparser
