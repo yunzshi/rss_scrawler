@@ -354,7 +354,7 @@ def fetch_rss_feeds():
 
 
 def purify_with_openclaw(raw_news_list):
-    """调用 OpenClaw API 进行事实提纯"""
+    """调用 OpenClaw facts_crawler Agent 进行事实提纯"""
     if not raw_news_list:
         return "今日无新闻抓取。"
 
@@ -382,31 +382,32 @@ def purify_with_openclaw(raw_news_list):
     try:
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENCLAW_TOKEN}"
+            "Authorization": f"Bearer {OPENCLAW_TOKEN}",
+            "x-openclaw-agent-id": AGENT_ID,
         }
         payload = {
-            "model": AGENT_ID,
+            "model": "openclaw",
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1
+            "user": f"crawler_{datetime.now():%Y%m%d%H%M%S}",
+            "temperature": 0.1,
         }
-        
-        # 使用重试的 session 发起 HTTP 请求
+
         session = create_requests_session()
         resp = session.post(OPENCLAW_API_URL, headers=headers, json=payload, timeout=180)
         resp.raise_for_status()
-        
+
         data = resp.json()
         choices = data.get("choices", [])
         if choices:
             return choices[0].get("message", {}).get("content", "未解析到有效回复")
         return "未解析到有效回复"
 
+    except requests.exceptions.Timeout:
+        raise RuntimeError("调用超时（180s）")
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"HTTP 调用 OpenClaw 失败: {e}")
     except ValueError as e:
         raise RuntimeError(f"JSON 解析失败: {e}")
-    except Exception as e:
-        raise RuntimeError(f"调用提纯失败: {e}")
 
 
 def push_result(content):
