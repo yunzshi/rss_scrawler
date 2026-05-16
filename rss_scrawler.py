@@ -29,7 +29,6 @@ import logging
 from datetime import datetime
 from html.parser import HTMLParser
 from io import StringIO
-from urllib.parse import urlparse
 
 # ==========================================
 # 0. 日志初始化
@@ -166,6 +165,11 @@ GATEWAY_PORT = _as_int(_pick_env_yaml("OPENCLAW_PORT", ("gateway", "port"), _gat
 OPENCLAW_API_URL = os.environ.get("OPENCLAW_API_URL") or _yaml_config.get("gateway", {}).get("api_url") or f"http://127.0.0.1:{GATEWAY_PORT}/v1/chat/completions"
 OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN") or _yaml_config.get("gateway", {}).get("token") or _auth.get("token", "")
 
+if not OPENCLAW_TOKEN:
+    logger.error("OPENCLAW_TOKEN 未配置，退出。请通过环境变量、config.yaml 或 openclaw.json 设置。")
+    sys.exit(1)
+
+
 # Agent 与 RSS 列表（保留代码内默认）
 AGENT_ID = os.environ.get("AGENT_ID") or _yaml_config.get("agent", {}).get("id") or "facts_crawler"
 
@@ -205,27 +209,12 @@ REQUEST_TIMEOUT = _as_int(_pick_env_yaml("REQUEST_TIMEOUT", ("network", "timeout
 
 
 # ==========================================
-# 3. 代理初始化
+# 3. 代理配置
 # ==========================================
 
-
-# 保存原始 socket（备用）
-_original_socket = socket.socket
-
-
-def setup_socks_proxy(proxy_url):
-    """验证 SOCKS5 代理配置"""
-    parsed = urlparse(proxy_url)
-    logger.info(f"代理已配置: {parsed.hostname}:{parsed.port} (SOCKS5)")
-
-
-def local_request(method, url, **kwargs):
-    """发送本地请求（不走代理）"""
-    return requests.request(method, url, **kwargs)
-
-
 if SOCKS5_PROXY:
-    setup_socks_proxy(SOCKS5_PROXY)
+    logger.info(f"代理已配置: {SOCKS5_PROXY}")
+
 
 # ==========================================
 # 4. 工具函数
@@ -475,21 +464,23 @@ if __name__ == "__main__":
         logger.info("当前没有更新的文章，退出。")
         sys.exit(0)
 
+    success = False
     try:
         # 2. 提纯
         pure_facts = purify_with_openclaw(raw_news)
 
         # 3. 推送
         push_result(pure_facts)
+        success = True
+
     except Exception as e:
-        # 如果任何步骤失败，打印错误但继续保存历史
         logger.error(f"处理过程出错: {e}")
-        # 仍然会进入finally块保存历史
     finally:
-        # 4. 无论上面任何步骤是否成功，都要保存历史记录
-        # 这样可以确保已抓取的文章不会因为推送或提纯失败而重复
         history = load_history()
         history.extend(new_uids)
         save_history(history)
 
     logger.info("=== 完成 ===")
+
+    if not success:
+        sys.exit(1)
