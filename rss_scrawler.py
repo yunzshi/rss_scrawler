@@ -51,40 +51,47 @@ OPENCLAW_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 OPENCLAW_JSON = os.path.join(OPENCLAW_ROOT, "openclaw.json")
 # 默认历史记录路径使用 $HOME 环境变量（可被环境变量或 config.yaml 覆盖）
 HISTORY_FILE = os.path.join(os.environ.get("HOME", os.path.expanduser("~")), ".openclaw", ".rss_history.json")
-HISTORY_MAX_SIZE = 1500
+HISTORY_MAX_DAYS = 30
 
 
 def load_history():
-    """从历史文件中读取已处理过的文章 UID"""
+    """从历史文件中读取已处理过的文章 UID，格式为 {uid: timestamp}"""
     if not os.path.exists(HISTORY_FILE):
-        return []
+        return {}
     try:
         if os.path.getsize(HISTORY_FILE) > 2:
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            # 兼容旧格式（列表）：自动迁移为字典
             if isinstance(data, list):
                 if len(data) == 0:
                     raise ValueError("文件大小非空但解析出空列表，阻止全量重抓")
-                return data
-            raise ValueError(f"历史文件格式异常，不是列表: {type(data)}")
+                logger.info(f"历史文件为旧格式（列表），自动迁移为字典格式（{len(data)} 条）")
+                return {uid: 0.0 for uid in data}
+            if not isinstance(data, dict):
+                raise ValueError(f"历史文件格式异常: {type(data)}")
+            if len(data) == 0:
+                raise ValueError("文件非空但解析出空字典，阻止全量重抓")
+            return data
         else:
-            return []
+            return {}
     except Exception as e:
         logger.error(f"🚨 读取历史记录失败，终止执行防止全量倒灌: {e}")
         sys.exit(1)
 
 
 
-def save_history(history_list):
-    """保存处理记录，最多保留限定条数以防止文件无限增大 (原子写入)"""
+def save_history(history_dict):
+    """保存处理记录，删除超过 HISTORY_MAX_DAYS 天的条目（原子写入）"""
+    cutoff = datetime.now().timestamp() - HISTORY_MAX_DAYS * 86400
+    pruned = {uid: ts for uid, ts in history_dict.items() if ts > cutoff}
     import tempfile
     try:
         dir_name = os.path.dirname(HISTORY_FILE)
-        # 确保历史目录存在，避免 mkstemp 因目录不存在而失败
         os.makedirs(dir_name, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(dir=dir_name, prefix=".rss_history_tmp_", text=True)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(history_list[-HISTORY_MAX_SIZE:], f, ensure_ascii=False)
+            json.dump(pruned, f, ensure_ascii=False)
         os.replace(temp_path, HISTORY_FILE)
     except Exception as e:
         logger.error(f"⚠️ 保存历史记录失败: {e}")
@@ -284,7 +291,7 @@ def fetch_rss_feeds():
     new_uids = []
     
     history_list = load_history()
-    history_set = set(history_list)
+    history_set = set(history_list.keys())
 
     session = create_requests_session()
 
@@ -339,7 +346,9 @@ def fetch_rss_feeds():
     if before > len(raw_news):
         logger.info(f"本批次内部去重: {before} → {len(raw_news)} 条")
 
-    return raw_news, new_uids
+    now_ts = datetime.now().timestamp()
+    new_uid_map = {uid: now_ts for uid in new_uids}
+    return raw_news, new_uid_map
 
 
 def purify_with_openclaw(raw_news_list):
@@ -427,12 +436,14 @@ def push_result(content):
         f"━━━━━━━━━━━━━━━━\n"
         f"📅 {datetime.now():%Y-%m-%d %H:%M}"
     )
+    deliver_session = f"deliver_{datetime.now():%Y%m%d%H%M%S}"
     try:
         import subprocess
         result = subprocess.run(
             [
                 "openclaw", "agent",
                 "--agent", AGENT_ID,
+                "--session-id", deliver_session,
                 "--message", f"请将以下消息原样发送，不要添加任何内容，不要改变格式和换行：\n\n{deliver_text}",
                 "--deliver",
                 "--channel", FEISHU_CHANNEL,
@@ -459,7 +470,7 @@ if __name__ == "__main__":
     logger.info("=== Anti-FOMO Facts Crawler 开始运行 ===")
 
     # 1. 抓取
-    raw_news, new_uids = fetch_rss_feeds()
+    raw_news, new_uid_map = fetch_rss_feeds()
     if not raw_news:
         logger.info("当前没有更新的文章，退出。")
         sys.exit(0)
@@ -477,7 +488,7 @@ if __name__ == "__main__":
         logger.error(f"处理过程出错: {e}")
     finally:
         history = load_history()
-        history.extend(new_uids)
+        history.update(new_uid_map)
         save_history(history)
 
     logger.info("=== 完成 ===")
