@@ -1,0 +1,22 @@
+# Local env and secrets
+.env
+openclaw.json
+
+# Historical and runtime files
+.openclaw/
+*.rss_history.json
+.rss_history.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtualenv
+.venv/
+venv/
+
+# Editor & OS
+.DS_Store
+.vscode/
+*.log
