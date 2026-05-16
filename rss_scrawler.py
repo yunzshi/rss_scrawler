@@ -308,7 +308,8 @@ def fetch_rss_feeds():
 
             count = 0
             for entry in feed.entries:
-                if count >= MAX_ITEMS_PER_FEED:
+                max_items = feed_info.get("max_items", MAX_ITEMS_PER_FEED)
+                if count >= max_items:
                     break
 
                 title = entry.get("title", "").strip()

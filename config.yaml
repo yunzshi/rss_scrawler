@@ -14,6 +14,7 @@ rss:
       url: "https://fs.blog/feed/"
     - name: "阮一峰科技周刊"
       url: "https://feeds.feedburner.com/ruanyifeng"
+      max_items: 5
     - name: "晚点LatePost"
       url: "https://rsshub.app/latepost"
   max_items_per_feed: 10
