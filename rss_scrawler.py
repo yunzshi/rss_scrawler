@@ -18,15 +18,29 @@ FACTS_CRAWLER: 纯净事实提取器 (Anti-FOMO)
 
 import feedparser
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import json
 import os
 import re
 import sys
 import socket
+import logging
 from datetime import datetime
 from html.parser import HTMLParser
 from io import StringIO
 from urllib.parse import urlparse
+
+# ==========================================
+# 0. 日志初始化
+# ==========================================
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
 
 # ==========================================
 # 1. 路径与配置加载
@@ -57,7 +71,7 @@ def load_history():
         else:
             return []
     except Exception as e:
-        print(f"🚨 读取历史记录失败，终止执行防止全量倒灌: {e}", file=sys.stderr)
+        logger.error(f"🚨 读取历史记录失败，终止执行防止全量倒灌: {e}")
         sys.exit(1)
 
 
@@ -74,14 +88,14 @@ def save_history(history_list):
             json.dump(history_list[-HISTORY_MAX_SIZE:], f, ensure_ascii=False)
         os.replace(temp_path, HISTORY_FILE)
     except Exception as e:
-        print(f"  ⚠️ 保存历史记录失败: {e}", file=sys.stderr)
+        logger.error(f"⚠️ 保存历史记录失败: {e}")
 
 
 
 def load_openclaw_config():
     """从 openclaw.json 读取 gateway 配置"""
     if not os.path.exists(OPENCLAW_JSON):
-        print(f"⚠️  未找到 {OPENCLAW_JSON}，将使用默认值或环境变量")
+        logger.warning(f"⚠️ 未找到 {OPENCLAW_JSON}，将使用默认值或环境变量")
         return {}
     with open(OPENCLAW_JSON, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -112,7 +126,7 @@ try:
         with open(CONFIG_YAML, "r", encoding="utf-8") as f:
             _yaml_config = yaml.safe_load(f) or {}
 except Exception as e:
-    print(f"⚠️ 读取 config.yaml 失败或 PyYAML 未安装: {e}")
+    logger.warning(f"⚠️ 读取 config.yaml 失败或 PyYAML 未安装: {e}")
 
 
 def _pick_env_yaml(env_key, yaml_path, default=None):
@@ -156,14 +170,10 @@ OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN") or _yaml_config.get("gateway",
 AGENT_ID = os.environ.get("AGENT_ID") or _yaml_config.get("agent", {}).get("id") or "facts_crawler"
 
 DEFAULT_RSS_FEEDS = [
-    {"name": "晚点LatePost", "url": "http://192.168.1.53:1200/latepost"},
-    {"name": "联合早报", "url": "http://192.168.1.53:1200/zaobao/realtime/china"},
-    {"name": "量子位", "url": "http://192.168.1.53:1200/qbitai/category/资讯"},
     {"name": "Hacker News Top", "url": "https://hnrss.org/frontpage"},
-    {"name": "阮一峰科技周刊", "url": "http://192.168.1.53:1200/github/issue/ruanyf/weekly"},
-    {"name": "少数派-深度文", "url": "http://192.168.1.53:1200/sspai/matrix"},
-    {"name": "Paul Graham Essays", "url": "http://192.168.1.53:1200/paulgraham/articles"},
     {"name": "Farnam Street", "url": "https://fs.blog/feed/"},
+    {"name": "阮一峰科技周刊", "url": "https://feeds.feedburner.com/ruanyifeng"},
+    {"name": "晚点LatePost", "url": "https://rsshub.app/latepost"},
 ]
 
 RSS_FEEDS = _yaml_config.get("rss", {}).get("feeds") or DEFAULT_RSS_FEEDS
@@ -206,7 +216,7 @@ _original_socket = socket.socket
 def setup_socks_proxy(proxy_url):
     """验证 SOCKS5 代理配置"""
     parsed = urlparse(proxy_url)
-    print(f"  代理已配置: {parsed.hostname}:{parsed.port} (SOCKS5)")
+    logger.info(f"代理已配置: {parsed.hostname}:{parsed.port} (SOCKS5)")
 
 
 def local_request(method, url, **kwargs):
@@ -268,36 +278,38 @@ def deduplicate(news_list):
 # ==========================================
 
 
+def create_requests_session():
+    session = requests.Session()
+    retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    session.mount('http://', HTTPAdapter(max_retries=retries))
+    session.mount('https://', HTTPAdapter(max_retries=retries))
+    if SOCKS5_PROXY:
+        session.proxies = {"http": SOCKS5_PROXY, "https": SOCKS5_PROXY}
+    return session
+
+
 def fetch_rss_feeds():
     """抓取并解析 RSS 源"""
-    print(f"[{datetime.now():%H:%M:%S}] 开始抓取 RSS 源...")
+    logger.info("开始抓取 RSS 源...")
     raw_news = []
     new_uids = []
     
     history_list = load_history()
     history_set = set(history_list)
 
-    # 使用 requests + SOCKS 代理抓取，比 feedparser 直接抓更稳定
-    proxies = {"http": SOCKS5_PROXY, "https": SOCKS5_PROXY} if SOCKS5_PROXY else None
+    session = create_requests_session()
 
     for feed_info in RSS_FEEDS:
         name = feed_info["name"]
-        print(f"  解析: {name}...")
+        logger.info(f"解析: {name}...")
         try:
             # 先用 requests 下载 RSS 内容，再交给 feedparser 解析
-            # 失败时重试一次
-            for attempt in range(2):
-                try:
-                    resp = requests.get(feed_info["url"], proxies=proxies, timeout=REQUEST_TIMEOUT)
-                    resp.raise_for_status()
-                    break
-                except Exception:
-                    if attempt == 0:
-                        continue
-                    raise
+            resp = session.get(feed_info["url"], timeout=REQUEST_TIMEOUT)
+            resp.raise_for_status()
+
             feed = feedparser.parse(resp.content)
             if feed.bozo and not feed.entries:
-                print(f"  ⚠️  {name} 解析异常: {feed.bozo_exception}")
+                logger.warning(f"⚠️ {name} 解析异常: {feed.bozo_exception}")
                 continue
 
             count = 0
@@ -328,25 +340,25 @@ def fetch_rss_feeds():
                 raw_news.append(f"【{name}】标题: {title} | 摘要: {description} | 链接: {link}")
                 count += 1
 
-            print(f"  ✓ {name}: 获取 {count} 条")
+            logger.info(f"✓ {name}: 获取 {count} 条")
         except Exception as e:
-            print(f"  ✗ {name} 抓取失败: {e}")
+            logger.error(f"✗ {name} 抓取失败: {e}")
 
     # 去重
     before = len(raw_news)
     raw_news = deduplicate(raw_news)
     if before > len(raw_news):
-        print(f"  本批次内部去重: {before} → {len(raw_news)} 条")
+        logger.info(f"本批次内部去重: {before} → {len(raw_news)} 条")
 
     return raw_news, new_uids
 
 
 def purify_with_openclaw(raw_news_list):
-    """调用 OpenClaw facts_crawler Agent 进行事实提纯"""
+    """调用 OpenClaw API 进行事实提纯"""
     if not raw_news_list:
         return "今日无新闻抓取。"
 
-    print(f"[{datetime.now():%H:%M:%S}] 调用 Agent 提纯 ({len(raw_news_list)} 条)...")
+    logger.info(f"调用 Agent 提纯 ({len(raw_news_list)} 条)...")
 
     news_text = "\n".join(raw_news_list)
 
@@ -367,52 +379,34 @@ def purify_with_openclaw(raw_news_list):
         f"{news_text}"
     )
 
-
     try:
-        import subprocess
-
-        # 直接把 prompt 作为 message 传递，避免 agent 读取文件时截断
-        # 生成基于时间戳的全新 Session ID，彻底消除模型的历史幽灵记忆
-        current_session = f"crawler_{datetime.now():%Y%m%d%H%M%S}"
-        result = subprocess.run(
-            [
-                "openclaw", "agent",
-                "--agent", AGENT_ID,
-                "--session-id", current_session,
-                "--message", prompt,
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-
-        if result.returncode != 0:
-            raise RuntimeError(f"openclaw agent 命令失败: {result.stderr.strip()}")
-
-        # 防御性截取：剥离所有的插件日志、颜色代码和CLI横幅
-        stdout_str = result.stdout
-        start_idx = stdout_str.find('{')
-        end_idx = stdout_str.rfind('}')
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENCLAW_TOKEN}"
+        }
+        payload = {
+            "model": AGENT_ID,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1
+        }
         
-        if start_idx != -1 and end_idx != -1:
-            clean_json = stdout_str[start_idx:end_idx+1]
-            data = json.loads(clean_json)
-        else:
-            raise RuntimeError(f"无法在输出中找到有效的 JSON 格式，输出截断: {stdout_str[:200]}")
-
-        # 提取 agent 回复文本
-        payloads = data.get("result", {}).get("payloads", [])
-        if payloads:
-            return payloads[0].get("text", "未解析到有效回复")
+        # 使用重试的 session 发起 HTTP 请求
+        session = create_requests_session()
+        resp = session.post(OPENCLAW_API_URL, headers=headers, json=payload, timeout=180)
+        resp.raise_for_status()
+        
+        data = resp.json()
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "未解析到有效回复")
         return "未解析到有效回复"
 
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"调用超时（180s）: {e}")
-    except json.JSONDecodeError as e:
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"HTTP 调用 OpenClaw 失败: {e}")
+    except ValueError as e:
         raise RuntimeError(f"JSON 解析失败: {e}")
     except Exception as e:
-        raise RuntimeError(f"调用 OpenClaw 失败: {e}")
+        raise RuntimeError(f"调用提纯失败: {e}")
 
 
 def push_result(content):
@@ -428,7 +422,7 @@ def push_result(content):
         return
 
     # 通过 openclaw agent --deliver 推送到飞书
-    print(f"\n[{datetime.now():%H:%M:%S}] 推送至飞书...")
+    logger.info("推送至飞书...")
 
     # 格式化简报内容：确保每条事实独立成行，加上序号
     lines = [l.strip() for l in content.strip().split("\n") if l.strip()]
@@ -460,11 +454,11 @@ def push_result(content):
             timeout=60,
         )
         if result.returncode == 0:
-            print("  ✓ 飞书推送成功")
+            logger.info("✓ 飞书推送成功")
         else:
-            print(f"  ✗ 飞书推送失败: {result.stderr.strip()}")
+            logger.error(f"✗ 飞书推送失败: {result.stderr.strip()}")
     except Exception as e:
-        print(f"  ✗ 飞书推送失败: {e}")
+        logger.error(f"✗ 飞书推送失败: {e}")
 
 
 # ==========================================
@@ -472,12 +466,12 @@ def push_result(content):
 # ==========================================
 
 if __name__ == "__main__":
-    print(f"=== Anti-FOMO Facts Crawler [{datetime.now():%Y-%m-%d %H:%M}] ===\n")
+    logger.info("=== Anti-FOMO Facts Crawler 开始运行 ===")
 
     # 1. 抓取
     raw_news, new_uids = fetch_rss_feeds()
     if not raw_news:
-        print("\n当前没有更新的文章，退出。")
+        logger.info("当前没有更新的文章，退出。")
         sys.exit(0)
 
     try:
@@ -488,7 +482,7 @@ if __name__ == "__main__":
         push_result(pure_facts)
     except Exception as e:
         # 如果任何步骤失败，打印错误但继续保存历史
-        print(f"\n✗ 处理过程出错: {e}\n")
+        logger.error(f"处理过程出错: {e}")
         # 仍然会进入finally块保存历史
     finally:
         # 4. 无论上面任何步骤是否成功，都要保存历史记录
@@ -497,4 +491,4 @@ if __name__ == "__main__":
         history.extend(new_uids)
         save_history(history)
 
-    print("\n=== 完成 ===")
+    logger.info("=== 完成 ===")
