@@ -192,22 +192,22 @@ MAX_ITEMS_PER_FEED = _as_int(_pick_env_yaml("MAX_ITEMS_PER_FEED", ("rss", "max_i
 
 SOCKS5_PROXY = os.environ.get("SOCKS5_PROXY") or _yaml_config.get("network", {}).get("socks5_proxy") or None
 
-deliver_env = os.environ.get("DELIVER_TO_FEISHU")
-deliver_yaml = _yaml_config.get("deliver", {}).get("to_feishu") if isinstance(_yaml_config.get("deliver", {}), dict) else None
+deliver_env = os.environ.get("DELIVER_TO_CHANNEL")
+deliver_yaml = _yaml_config.get("config", {}).get("deliver").get("enabled") if isinstance(_yaml_config.get("config", {}).get("deliver"), dict) else None
 if deliver_env is not None:
-    DELIVER_TO_FEISHU = _as_bool(deliver_env, True)
+    DELIVER_TO_CHANNEL = _as_bool(deliver_env, True)
 elif deliver_yaml is not None:
-    DELIVER_TO_FEISHU = _as_bool(deliver_yaml, True)
+    DELIVER_TO_CHANNEL = _as_bool(deliver_yaml, True)
 else:
-    DELIVER_TO_FEISHU = os.environ.get("DELIVER_TO_FEISHU", "true").lower() == "true"
+    DELIVER_TO_CHANNEL = os.environ.get("DELIVER_TO_CHANNEL", "true").lower() == "true"
 
-FEISHU_CHANNEL = os.environ.get("FEISHU_CHANNEL") or _yaml_config.get("deliver", {}).get("feishu_channel") or "feishu"
-# 默认 FEISHU_TARGET 使用占位符，避免在仓库中泄露真实 ID
-FEISHU_TARGET = os.environ.get("FEISHU_TARGET") or _yaml_config.get("deliver", {}).get("feishu_target") or "user:ou_xxx"
+CHANNEL_CHANNEL = os.environ.get("CHANNEL_CHANNEL") or _yaml_config.get("config", {}).get("deliver", {}).get("channel") or "feishu"
+# 默认 CHANNEL_TARGET 使用占位符，避免在仓库中泄露真实 ID
+CHANNEL_TARGET = os.environ.get("CHANNEL_TARGET") or _yaml_config.get("config", {}).get("deliver", {}).get("target") or "user:ou_xxx"
 
 # 历史记录与网络超时
 # 从环境变量或 YAML 获取历史文件路径，然后展开环境变量与 ~
-_raw_history_file = os.environ.get("HISTORY_FILE") or _yaml_config.get("history", {}).get("file") or HISTORY_FILE
+_raw_history_file = os.environ.get("HISTORY_FILE") or _yaml_config.get("config", {}).get("history_file") or HISTORY_FILE
 HISTORY_FILE = os.path.expanduser(os.path.expandvars(_raw_history_file))
 
 REQUEST_TIMEOUT = _as_int(_pick_env_yaml("REQUEST_TIMEOUT", ("network", "timeout"), 20), 20)
@@ -416,7 +416,7 @@ def push_result(content):
     print(content)
     print(f"\n{'=' * 40}")
 
-    if not DELIVER_TO_FEISHU:
+    if not DELIVER_TO_CHANNEL:
         return
 
     # 通过 openclaw agent --deliver 推送到飞书
@@ -445,9 +445,9 @@ def push_result(content):
                 "--session-id", deliver_session,
                 "--message", f"请将以下消息原样发送，不要添加任何内容，不要改变格式和换行：\n\n{deliver_text}",
                 "--deliver",
-                "--channel", FEISHU_CHANNEL,
+                "--channel", CHANNEL_CHANNEL,
                 "--json",
-                "--to", FEISHU_TARGET,
+                "--to", CHANNEL_TARGET,
             ],
             capture_output=True,
             text=True,

@@ -19,14 +19,14 @@ rss:
       url: "https://rsshub.app/latepost"
   max_items_per_feed: 10
 
-deliver:
-  to_feishu: true
-  feishu_channel: "feishu"
-  feishu_target: "user:ou_xxx"
-
-history:
-  file: "$HOME/.openclaw/.rss_history.json"
-  max_size: 1500
+# deliver & history config
+config:
+  history_file: "$HOME/.openclaw/.rss_history.json"
+  history_max_days: 30
+  deliver:
+    enabled: true
+    channel: "feishu"
+    target: "user:ou_xxx"
 
 network:
   socks5_proxy: null
