@@ -286,7 +286,7 @@ def fetch_rss_feeds():
         try:
             # 先用 requests 下载 RSS 内容，再交给 feedparser 解析
             # 失败时重试一次
-                for attempt in range(2):
+            for attempt in range(2):
                 try:
                     resp = requests.get(feed_info["url"], proxies=proxies, timeout=REQUEST_TIMEOUT)
                     resp.raise_for_status()

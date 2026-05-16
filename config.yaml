@@ -8,8 +8,22 @@ agent:
 
 rss:
   feeds:
+    - name: "晚点LatePost"
+      url: "http://192.168.1.53:1200/latepost"
+    - name: "联合早报"
+      url: "http://192.168.1.53:1200/zaobao/realtime/china"
+    - name: "量子位"
+      url: "http://192.168.1.53:1200/qbitai/category/资讯"
     - name: "Hacker News Top"
       url: "https://hnrss.org/frontpage"
+    - name: "阮一峰科技周刊"
+      url: "http://192.168.1.53:1200/github/issue/ruanyf/weekly"
+    - name: "少数派-深度文"
+      url: "http://192.168.1.53:1200/sspai/matrix"
+    - name: "Paul Graham Essays"
+      url: "http://192.168.1.53:1200/paulgraham/articles"
+    - name: "Farnam Street"
+      url: "https://fs.blog/feed/"
   max_items_per_feed: 10
 
 deliver:
