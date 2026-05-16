@@ -56,22 +56,14 @@ agent:
 
 rss:
   feeds:
-    - name: "晚点LatePost"
-      url: "http://192.168.1.53:1200/latepost"
-    - name: "联合早报"
-      url: "http://192.168.1.53:1200/zaobao/realtime/china"
-    - name: "量子位"
-      url: "http://192.168.1.53:1200/qbitai/category/资讯"
     - name: "Hacker News Top"
       url: "https://hnrss.org/frontpage"
-    - name: "阮一峰科技周刊"
-      url: "http://192.168.1.53:1200/github/issue/ruanyf/weekly"
-    - name: "少数派-深度文"
-      url: "http://192.168.1.53:1200/sspai/matrix"
-    - name: "Paul Graham Essays"
-      url: "http://192.168.1.53:1200/paulgraham/articles"
     - name: "Farnam Street"
       url: "https://fs.blog/feed/"
+    - name: "阮一峰科技周刊"
+      url: "https://feeds.feedburner.com/ruanyifeng"
+    - name: "晚点LatePost"
+      url: "https://rsshub.app/latepost"
   max_items_per_feed: 10
 
 deliver:
@@ -121,7 +113,7 @@ OPENCLAW_TOKEN=xxx DELIVER_TO_FEISHU=false python3 rss_scrawler.py
 
 1. 抓取 `RSS_FEEDS` 列表中配置的源（默认包含若干示例源）。
 2. 去重并拼接为原始条目列表。若无新条目，则退出。 
-3. 使用 `openclaw agent --agent facts_crawler` 将原始条目传给 Agent 进行“事实提纯”。
+3. 使用标准的 OpenAI HTTP API (`/v1/chat/completions`) 将原始条目传给 Agent 进行“事实提纯”。
 4. 将 Agent 输出打印并（可选）推送至飞书。
 
 ## 自定义与扩展
